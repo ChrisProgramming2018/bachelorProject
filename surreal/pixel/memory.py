@@ -1,30 +1,57 @@
-# Copyright 2020
-# Author: Christian Leininger <info2016frei@gmail.com>
 import numpy as np
-import random
+
+import kornia
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 
 class ReplayBuffer(object):
-    def __init__(self, max_size=1e6):
-        self.storage = []
-        self.max_size = max_size
-        self.ptr = 0
+    """Buffer to store environment transitions."""
+    def __init__(self, obs_shape, action_shape, capacity, device):
+        self.capacity = capacity
+        self.device = device
+        self.obses = np.empty((capacity, *obs_shape), dtype=np.int8)
+        self.next_obses = np.empty((capacity, *obs_shape), dtype=np.int8)
+        self.actions = np.empty((capacity, *action_shape), dtype=np.float32)
+        self.rewards = np.empty((capacity, 1), dtype=np.float32)
+        self.not_dones = np.empty((capacity, 1), dtype=np.float32)
+        self.not_dones_no_max = np.empty((capacity, 1), dtype=np.float32)
 
-    def add(self, transition):
-        if len(self.storage) == self.max_size:
-            self.storage[int(self.ptr)] = transition
-            self.ptr = (self.ptr + 1) % self.max_size
-        else:
-            self.storage.append(transition)
+        self.idx = 0
+        self.full = False
+
+    def __len__(self):
+        return self.capacity if self.full else self.idx
+
+    def add(self, obs, action, reward, next_obs, done, done_no_max):
+        np.copyto(self.obses[self.idx], obs)
+        np.copyto(self.actions[self.idx], action)
+        np.copyto(self.rewards[self.idx], reward)
+        np.copyto(self.next_obses[self.idx], next_obs)
+        np.copyto(self.not_dones[self.idx], not done)
+        np.copyto(self.not_dones_no_max[self.idx], not done_no_max)
+
+        self.idx = (self.idx + 1) % self.capacity
+        self.full = self.full or self.idx == 0
 
     def sample(self, batch_size):
-        ind = np.random.randint(0, len(self.storage), size=batch_size)
-        batch_states, batch_next_states, batch_actions, batch_rewards, batch_dones = [], [], [], [], []
-        for i in ind:
-            state, next_state, action, reward, done = self.storage[i]
-            batch_states.append(np.array(state, copy=False))
-            batch_next_states.append(np.array(next_state, copy=False))
-            batch_actions.append(np.array(action, copy=False))
-            batch_rewards.append(np.array(reward, copy=False))
-            batch_dones.append(np.array(done, copy=False))
-        return np.array(batch_states), np.array(batch_next_states), np.array(batch_actions), np.array(batch_rewards).reshape(-1, 1), np.array(batch_dones).reshape(-1, 1)
+        idxs = np.random.randint(0,
+                                 self.capacity if self.full else self.idx,
+                                 size=batch_size)
+
+        obses = self.obses[idxs]
+        next_obses = self.next_obses[idxs]
+        obses_aug = obses.copy()
+        next_obses_aug = next_obses.copy()
+
+        obses = torch.as_tensor(obses, device=self.device).float()
+        next_obses = torch.as_tensor(next_obses, device=self.device).float()
+        obses_aug = torch.as_tensor(obses_aug, device=self.device).float()
+        next_obses_aug = torch.as_tensor(next_obses_aug,
+                                         device=self.device).float()
+        actions = torch.as_tensor(self.actions[idxs], device=self.device)
+        rewards = torch.as_tensor(self.rewards[idxs], device=self.device)
+        not_dones_no_max = torch.as_tensor(self.not_dones_no_max[idxs],
+                                           device=self.device)
+        return obses, actions, rewards, next_obses, not_dones_no_max
