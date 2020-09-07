@@ -32,7 +32,7 @@ def mkdir(base, name):
     return path
 
 
-def evaluate_policy(policy, writer, total_timesteps, args, episode = 1):
+def evaluate_policy(policy, writer, total_timesteps, args, episode=10):
     """
 
 
@@ -41,10 +41,6 @@ def evaluate_policy(policy, writer, total_timesteps, args, episode = 1):
        param2(): writer
        param3(): episode default 1 number for path to save the video
     """
-    work_dir = mkdir('exp', 'crs')
-    monitor_dir = mkdir(work_dir, 'monitor-{}'.format(episode))
-    env = gym.make(args.env_name)
-    # env_e = wrappers.Monitor(env, monitor_dir, force = True)
     avg_reward = 0.
     seeds = [x for x in range(10)]
     for s in seeds:
@@ -57,9 +53,9 @@ def evaluate_policy(policy, writer, total_timesteps, args, episode = 1):
             avg_reward += reward
     avg_reward /= len(seeds)
     writer.add_scalar('Evaluation reward', avg_reward, total_timesteps)
-    print ("---------------------------------------")
-    print ("Average Reward over the Evaluation Step: %f" % (avg_reward))
-    print ("---------------------------------------")
+    print("---------------------------------------")
+    print("Average Reward over the Evaluation Step: %f" % (avg_reward))
+    print("---------------------------------------")
     return avg_reward
 
 
@@ -87,21 +83,16 @@ def time_format(sec):
 
 
 
-def train(args, repeat_opt):
+def train(args):
     """
 
     Args:
-        param1(TD3): policy
-        param2(Buffer):
-        param3(openai env):
+        param1(args): hyperparameter
     """
 
     # in case seed experements
-    args.seed = repeat_opt
     now = datetime.now()
-
     dt_string = now.strftime("%d_%m_%Y_%H:%M:%S")
-    #args.repeat_opt = repeat_opt
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     pathname = str(args.env_name) + '_repeat_train_' + str(args.repeat_opt)
@@ -112,7 +103,6 @@ def train(args, repeat_opt):
     write_into_file(pathname, text)
     arg_text = str(args)
     write_into_file(pathname, arg_text)
-    # tensorboard_name = 'runs' + str(dt_string) + '/' + pathname + "-Dueling"
     tensorboard_name = 'runs/' + pathname
     writer = SummaryWriter(tensorboard_name)
     env = gym.make(args.env_name)
@@ -121,17 +111,11 @@ def train(args, repeat_opt):
     action_dim = env.action_space.shape[0]
     max_action = float(env.action_space.high[0])
     print(state_dim)
+    if args.agent == "TD3_ad":
+        policy = TD31v1(state_dim, action_dim, max_action, args)
+    elif args.agent == "TD3":
+        policy = TD3(state_dim, action_dim, max_action, args)
 
-    policy = TD31v1(state_dim, action_dim, max_action, args)
-
-    replay_buffer = ReplayBuffer()
-    work_dir = mkdir('exp', 'crs')
-    monitor_dir = mkdir(work_dir, 'monitor')
-    max_episode_steps = env._max_episode_steps
-    save_env_vid = False
-    if save_env_vid:
-        env = wrappers.Monitor(env, monitor_dir, force = True)
-        env.reset()
     total_timesteps = 0
     timesteps_since_eval = 0
     episode_num = 0
@@ -141,9 +125,9 @@ def train(args, repeat_opt):
     episode_reward = 0
     evaluations = []
     file_name = "%s_%s_%s" % ("TD3", args.env_name, str(args.seed))
-    print ("---------------------------------------")
-    print ("Settings: %s" % (file_name))
-    print ("---------------------------------------")
+    print("---------------------------------------")
+    print("Settings: %s" % (file_name))
+    print("---------------------------------------")
     # We start the main loop over 500,000 timesteps
     tb_update_counter = 0
     while total_timesteps <  args.max_timesteps:
@@ -190,12 +174,12 @@ def train(args, repeat_opt):
                 action = (action + np.random.normal(0, args.expl_noise, size=env.action_space.shape[0])).clip(env.action_space.low, env.action_space.high)
 
 
-        if total_timesteps % args.target_update_freq == 0:
-            policy.hardupdate()
+        if args.agent == "TD3_ad":
+            if total_timesteps % args.target_update_freq == 0:
+                policy.hardupdate()
         # The agent performs the action in the environment, then reaches the next state and receives the reward
         new_obs, reward, done, _ = env.step(action)
         # We check if the episode is done
-        #done_bool = 0 if episode_timesteps + 1 == env._max_episode_steps else float(done)
         done_bool = 0 if episode_timesteps + 1 == 1000 else float(done)
         # We increase the total reward
         episode_reward += reward
@@ -203,9 +187,6 @@ def train(args, repeat_opt):
         replay_buffer.add((obs, new_obs, action, reward, done_bool))
         # We update the state, the episode timestep, the total timesteps, and the timesteps since the evaluation of the policy
         obs = new_obs
-        #if total_timesteps % target_update_freq == 0
-        #policy.hardupdate()
-
         episode_timesteps += 1
         total_timesteps += 1
         timesteps_since_eval += 1
@@ -213,6 +194,7 @@ def train(args, repeat_opt):
 
     # We add the last policy evaluation to our list of evaluations and we save our model
     evaluations.append(evaluate_policy(policy, writer, total_timesteps, args, episode_num))
-    if args.save_model: policy.save("%s" % (file_name), directory="./pytorch_models")
+    if args.save_model: 
+        policy.save("%s" % (file_name), directory="./pytorch_models")
     np.save("./results/%s" % (file_name), evaluations)
 
