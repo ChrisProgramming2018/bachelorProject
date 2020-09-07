@@ -42,6 +42,7 @@ def evaluate_policy(policy, writer, total_timesteps, args, episode=10):
        param3(): episode default 1 number for path to save the video
     """
     avg_reward = 0.
+    env = gym.make(args.env_name)
     seeds = [x for x in range(10)]
     for s in seeds:
         env.seed(s)
@@ -95,14 +96,11 @@ def train(args):
     dt_string = now.strftime("%d_%m_%Y_%H:%M:%S")
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    pathname = str(args.env_name) + '_repeat_train_' + str(args.repeat_opt)
-    pathname += '_update_freq_' + str(args.target_update_freq) + "_num_q_target_"
-    pathname += str(args.num_q_target) + "_seed_" + str(args.seed) + "_run_" + str(args.run) + "_agent_" + args.agent
-    text = "Star_training target_update_freq: {}  num_q_target: {}  use device {} ".format(args.target_update_freq, args.num_q_target, args.device)
-    print(pathname, text)
-    write_into_file(pathname, text)
-    arg_text = str(args)
-    write_into_file(pathname, arg_text)
+    pathname = str(args.env_name)
+    if args.agent == "TD3_ad":
+        pathname += '_update_freq_' + str(args.target_update_freq) 
+        pathname += "_num_q_target_" +  str(args.num_q_target) 
+    pathname += "_seed_" + str(args.seed) + "_agent_" + args.agent
     tensorboard_name = 'runs/' + pathname
     writer = SummaryWriter(tensorboard_name)
     env = gym.make(args.env_name)
@@ -115,7 +113,7 @@ def train(args):
         policy = TD31v1(state_dim, action_dim, max_action, args)
     elif args.agent == "TD3":
         policy = TD3(state_dim, action_dim, max_action, args)
-
+    replay_buffer = ReplayBuffer()
     total_timesteps = 0
     timesteps_since_eval = 0
     episode_num = 0
@@ -124,7 +122,7 @@ def train(args):
     scores_window = deque(maxlen=100)
     episode_reward = 0
     evaluations = []
-    file_name = "%s_%s_%s" % ("TD3", args.env_name, str(args.seed))
+    file_name = "%s_%s_%s" % (args.agent, args.env_name, str(args.seed))
     print("---------------------------------------")
     print("Settings: %s" % (file_name))
     print("---------------------------------------")
@@ -147,16 +145,14 @@ def train(args):
                 text = "Total Timesteps: {} Episode Num: {} Reward: {}  Average Re: {:.2f} Time: {}".format(total_timesteps, episode_num, episode_reward, np.mean(scores_window), time_format(time.time()-t0))
                 print(text)
                 write_into_file('search-' + pathname, text)
-                for i in range(args.repeat_opt):
-                    policy.train(replay_buffer, writer, episode_timesteps)
             # We evaluate the episode and we save the policy
             if timesteps_since_eval >= args.eval_freq:
-                policy.save("%s" % (file_name), directory="./pytorch_models")
+                policy.save("%s" % (file_name), directory= args.locexp + "/pytorch_models")
                 timesteps_since_eval %= args.eval_freq
                 evaluations.append(evaluate_policy(policy, writer, total_timesteps, args, episode_num))
                 save_model = file_name + '-{}'.format(episode_num)
-                policy.save(save_model, directory="./pytorch_models")
-                np.save("./results/%s" % (file_name), evaluations)
+                policy.save(save_model, directory= args.locexp +  "/pytorch_models")
+                np.save(args.locexp +  "/results/%s" % (file_name), evaluations)
             # When the training step is done, we reset the state of the environment
             obs = env.reset()
             # Set the Done to False
@@ -190,6 +186,8 @@ def train(args):
         episode_timesteps += 1
         total_timesteps += 1
         timesteps_since_eval += 1
+        if total_timesteps > args.start_timesteps:
+            policy.train(replay_buffer, writer, 1)
 
 
     # We add the last policy evaluation to our list of evaluations and we save our model

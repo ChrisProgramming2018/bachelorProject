@@ -6,7 +6,6 @@ import sys
 import time
 import random
 import numpy as np
-import matplotlib.pyplot as plt
 import argparse
 import gym
 import torch
@@ -62,4 +61,4 @@ if __name__ == "__main__":
     parser.add_argument('--locexp', type=str)                           # name of dir to save data
     parser.add_argument('--agent', default="TD3", type=str)             # select agent
     arg = parser.parse_args()
-
+    main(arg)

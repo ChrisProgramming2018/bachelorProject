@@ -70,7 +70,7 @@ class TD3(object):
             # Step 4: Use the differenet Target Critis (delayed update)
             # and min of two  Critic from TD3 to create the different Q Targets
             # compute the average of all Q Targets to get a single value
-            target_Q1, target_Q2 = critic(next_state, next_action) 
+            target_Q1, target_Q2 = self.critic(next_state, next_action) 
             target_Q = torch.min(target_Q1, target_Q2)
             
            
