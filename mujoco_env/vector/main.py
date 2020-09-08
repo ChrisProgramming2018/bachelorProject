@@ -15,6 +15,8 @@ from gym import wrappers
 from torch.autograd import Variable
 from collections import deque
 from utilis import train
+import multiprocessing as mp
+from functools import partial
 
 
 def main(arg):
@@ -33,7 +35,12 @@ def main(arg):
     if arg.save_model and not os.path.exists(dir_model):
         os.makedirs(dir_model)
     print("Created model dir {} ".format(dir_model))
-    train(arg)
+    processes = []
+    pool = mp.Pool()
+    seeds = [1,2,3,4]
+    func = partial(train, arg)
+    pool.map(func, seeds)
+    pool.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

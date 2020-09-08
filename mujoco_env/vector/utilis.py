@@ -84,7 +84,7 @@ def time_format(sec):
 
 
 
-def train(args):
+def train(args, param):
     """
 
     Args:
@@ -92,6 +92,7 @@ def train(args):
     """
 
     # in case seed experements
+    args.seed = param
     now = datetime.now()
     dt_string = now.strftime("%d_%m_%Y_%H:%M:%S")
     torch.manual_seed(args.seed)
@@ -101,7 +102,7 @@ def train(args):
         pathname += '_update_freq_' + str(args.target_update_freq) 
         pathname += "_num_q_target_" +  str(args.num_q_target) 
     pathname += "_seed_" + str(args.seed) + "_agent_" + args.agent
-    tensorboard_name = 'runs/' + pathname
+    tensorboard_name = args.locexp +  '/runs/' + pathname
     writer = SummaryWriter(tensorboard_name)
     env = gym.make(args.env_name)
     env.seed(args.seed)
@@ -147,12 +148,8 @@ def train(args):
                 write_into_file('search-' + pathname, text)
             # We evaluate the episode and we save the policy
             if timesteps_since_eval >= args.eval_freq:
-                policy.save("%s" % (file_name), directory= args.locexp + "/pytorch_models")
                 timesteps_since_eval %= args.eval_freq
                 evaluations.append(evaluate_policy(policy, writer, total_timesteps, args, episode_num))
-                save_model = file_name + '-{}'.format(episode_num)
-                policy.save(save_model, directory= args.locexp +  "/pytorch_models")
-                np.save(args.locexp +  "/results/%s" % (file_name), evaluations)
             # When the training step is done, we reset the state of the environment
             obs = env.reset()
             # Set the Done to False
